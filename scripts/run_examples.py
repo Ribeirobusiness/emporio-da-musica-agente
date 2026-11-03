@@ -1,12 +1,17 @@
 """Run scripted customer conversations against the real model and save the
 transcripts (with the tool calls behind each answer) to examples/*.md.
 
-Usage: python scripts/run_examples.py            # all scenarios
-       python scripts/run_examples.py 3          # only scenario 3
+Usage:
+    python scripts/run_examples.py                                   # all scenarios, default model -> examples/
+    python scripts/run_examples.py --model gpt-4o-mini --out benchmarks/gpt-4o-mini
+    python scripts/run_examples.py --only 3                          # only scenario 3
 
-Every file in examples/ was produced by this script; nothing is hand-edited.
+Every transcript in examples/ and benchmarks/ was produced by this script;
+nothing is hand-edited. A summary.json with token usage and cost is written
+next to the transcripts.
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -73,6 +78,22 @@ SCENARIOS = [
 ]
 
 
+# USD per 1M tokens: (input, cached input, output). OpenAI list prices,
+# checked on 2026-11-03. Used only to report cost; does not affect behaviour.
+PRICES = {
+    "gpt-4.1-mini": (0.40, 0.10, 1.60),
+    "gpt-4o-mini": (0.15, 0.075, 0.60),
+    "gpt-4.1-nano": (0.10, 0.025, 0.40),
+}
+
+
+def cost_usd(model: str, input_tokens: int, cached: int, output_tokens: int) -> float | None:
+    if model not in PRICES:
+        return None
+    p_in, p_cached, p_out = PRICES[model]
+    return ((input_tokens - cached) * p_in + cached * p_cached + output_tokens * p_out) / 1_000_000
+
+
 def render(scenario: dict, turns: list, model: str, started: datetime) -> str:
     lines = [
         f"# {scenario['title']}",
@@ -84,9 +105,10 @@ def render(scenario: dict, turns: list, model: str, started: datetime) -> str:
         "---",
         "",
     ]
-    total_in = total_out = 0
+    total_in = total_cached = total_out = 0
     for user_text, turn in turns:
         total_in += turn.input_tokens
+        total_cached += turn.cached_input_tokens
         total_out += turn.output_tokens
         lines += [f"**Cliente:** {user_text}", ""]
         if turn.tool_calls:
@@ -96,26 +118,49 @@ def render(scenario: dict, turns: list, model: str, started: datetime) -> str:
                 lines += [f"{call.name}({json.dumps(call.input, ensure_ascii=False)})", f"-> {out}", ""]
             lines += ["```", "", "</details>", ""]
         lines += [f"**Duda:** {turn.reply}", ""]
-    lines += ["---", "", f"Tokens: {total_in} input, {total_out} output."]
+    cost = cost_usd(model, total_in, total_cached, total_out)
+    cost_txt = f" Estimated cost: US$ {cost:.5f}." if cost is not None else ""
+    lines += ["---", "", f"Tokens: {total_in} input ({total_cached} cached), {total_out} output.{cost_txt}"]
     return "\n".join(lines) + "\n"
 
 
 def main() -> None:
     load_dotenv(ROOT / ".env")
-    only = {int(a) for a in sys.argv[1:]}
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", help="OpenAI model id (default: EMPORIO_MODEL or the agent default)")
+    parser.add_argument("--out", default="examples", help="output folder, relative to the repo root")
+    parser.add_argument("--only", type=int, nargs="*", help="scenario numbers to run")
+    args = parser.parse_args()
+
     data, sections = load_data(), load_sections()
-    out_dir = ROOT / "examples"
-    out_dir.mkdir(exist_ok=True)
+    out_dir = ROOT / args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary = []
     for i, scenario in enumerate(SCENARIOS, start=1):
-        if only and i not in only:
+        if args.only and i not in args.only:
             continue
         tools = StoreTools(data, sections, escalation_log=ROOT / "logs" / "encaminhamentos.jsonl")
-        agent = StoreAgent(tools)
+        agent = StoreAgent(tools, model=args.model)
         started = datetime.now(STORE_TZ)
         turns = [(msg, agent.reply(msg)) for msg in scenario["messages"]]
         path = out_dir / f"{scenario['slug']}.md"
         path.write_text(render(scenario, turns, agent.model, started), encoding="utf-8")
-        print(f"wrote {path.relative_to(ROOT)}")
+        tin = sum(t.input_tokens for _, t in turns)
+        tcached = sum(t.cached_input_tokens for _, t in turns)
+        tout = sum(t.output_tokens for _, t in turns)
+        summary.append({
+            "scenario": scenario["slug"],
+            "model": agent.model,
+            "customer_messages": len(turns),
+            "model_calls": sum(t.model_calls for _, t in turns),
+            "tool_calls": [[c.name for c in t.tool_calls] for _, t in turns],
+            "input_tokens": tin, "cached_input_tokens": tcached, "output_tokens": tout,
+            "cost_usd": cost_usd(agent.model, tin, tcached, tout),
+        })
+        print(f"wrote {path}")
+    (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    total = sum(s["cost_usd"] or 0 for s in summary)
+    print(f"total estimated cost: US$ {total:.4f}")
 
 
 if __name__ == "__main__":

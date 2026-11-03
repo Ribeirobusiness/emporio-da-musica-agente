@@ -7,7 +7,7 @@ name = "emporio-da-musica-agente"
 version = "0.1.0"
 description = "Customer service agent prototype for Empório da Música (Artefact AI Engineer challenge)"
 requires-python = ">=3.10"
-dependencies = ["anthropic>=0.69", "pandas>=2.2", "python-dotenv>=1.0"]
+dependencies = ["openai>=1.40", "pandas>=2.2", "python-dotenv>=1.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

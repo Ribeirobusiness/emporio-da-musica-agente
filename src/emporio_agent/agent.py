@@ -1,28 +1,41 @@
-"""Agent loop: native tool use (function calling) on the Anthropic Messages API.
+"""Agent loop: function calling on the OpenAI Chat Completions API.
 
 The loop is the classic ReAct cycle without a framework:
-model -> tool_use blocks -> run tools in Python -> tool_result -> model ...
+model -> tool_calls -> run tools in Python -> tool messages -> model ...
 until the model answers in plain text or the step limit is hit.
+
+This is the only module that knows which LLM provider is used. Tools,
+data, policies and the system prompt are provider-agnostic.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
-from typing import Any
 
-import anthropic
+from openai import OpenAI, OpenAIError
 
 from .prompts import build_system_prompt
 from .tools import STORE_TZ, TOOL_SCHEMAS, StoreTools
 
-DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MODEL = "gpt-4.1-mini"
 MAX_TOOL_STEPS = 8
 MAX_TURNS_IN_CONTEXT = 12  # user turns kept in the prompt; older ones are dropped
 FALLBACK_REPLY = (
     "Desculpa, tive um problema técnico agora e não consegui consultar o sistema. "
     "Pode tentar de novo em instantes? Se preferir, fale com a equipe pelo (67) 3341-4444."
 )
+
+# Tool schemas are written once (name, description, JSON Schema) and adapted
+# to the OpenAI "function" format here.
+OPENAI_TOOLS = [
+    {
+        "type": "function",
+        "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]},
+    }
+    for t in TOOL_SCHEMAS
+]
 
 
 @dataclass
@@ -37,20 +50,15 @@ class Turn:
     reply: str
     tool_calls: list[ToolCall] = field(default_factory=list)
     input_tokens: int = 0
+    cached_input_tokens: int = 0
     output_tokens: int = 0
-
-
-def _to_plain(content: Any) -> Any:
-    """SDK content blocks -> plain dicts, so history can be saved as JSON."""
-    if isinstance(content, list):
-        return [b.model_dump(exclude_none=True) if hasattr(b, "model_dump") else b for b in content]
-    return content
+    model_calls: int = 0
 
 
 def trim_history(messages: list[dict], max_user_turns: int = MAX_TURNS_IN_CONTEXT) -> list[dict]:
-    """Keep the last N user turns. Cuts only at plain-text user messages, so a
-    tool_use is never separated from its tool_result."""
-    starts = [i for i, m in enumerate(messages) if m["role"] == "user" and isinstance(m["content"], str)]
+    """Keep the last N user turns. Cuts only at user messages, so an assistant
+    message with tool_calls is never separated from its tool results."""
+    starts = [i for i, m in enumerate(messages) if m["role"] == "user"]
     if len(starts) <= max_user_turns:
         return messages
     return messages[starts[-max_user_turns]:]
@@ -60,62 +68,78 @@ class StoreAgent:
     def __init__(
         self,
         tools: StoreTools,
-        client: anthropic.Anthropic | None = None,
+        client: OpenAI | None = None,
         model: str | None = None,
         history: list[dict] | None = None,
     ):
         self.tools = tools
-        self.client = client or anthropic.Anthropic()
+        self.client = client or OpenAI()
         self.model = model or os.getenv("EMPORIO_MODEL", DEFAULT_MODEL)
         self.history: list[dict] = history or []
 
-    def _system(self) -> list[dict]:
-        # cache_control lets the API reuse the long, stable prefix (tools + system) across calls
+    def _system(self) -> dict:
+        # The system prompt and tool schemas form a stable prefix of ~3k tokens;
+        # OpenAI caches repeated prefixes automatically, so later calls bill it at a discount.
         now = self.tools.now_fn().astimezone(STORE_TZ)
-        return [{"type": "text", "text": build_system_prompt(now), "cache_control": {"type": "ephemeral"}}]
+        return {"role": "system", "content": build_system_prompt(now)}
 
     def reply(self, user_text: str) -> Turn:
         self.history.append({"role": "user", "content": user_text})
         messages = list(trim_history(self.history))  # copy: this list grows inside the loop
         turn = Turn(reply="")
-        tools = [dict(t) for t in TOOL_SCHEMAS]
-        tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
 
         for _ in range(MAX_TOOL_STEPS):
             try:
-                response = self.client.messages.create(
+                response = self.client.chat.completions.create(
                     model=self.model,
-                    max_tokens=1024,
-                    system=self._system(),
-                    tools=tools,
-                    messages=messages,
+                    messages=[self._system(), *messages],
+                    tools=OPENAI_TOOLS,
+                    max_completion_tokens=1024,
                 )
-            except anthropic.APIError as exc:
+            except OpenAIError as exc:
                 turn.reply = FALLBACK_REPLY
                 turn.tool_calls.append(ToolCall("api_error", {}, str(exc)))
                 self.history.append({"role": "assistant", "content": FALLBACK_REPLY})
                 return turn
 
-            turn.input_tokens += response.usage.input_tokens
-            turn.output_tokens += response.usage.output_tokens
-            assistant_msg = {"role": "assistant", "content": _to_plain(response.content)}
+            turn.model_calls += 1
+            usage = response.usage
+            if usage:
+                turn.input_tokens += usage.prompt_tokens
+                turn.output_tokens += usage.completion_tokens
+                details = getattr(usage, "prompt_tokens_details", None)
+                turn.cached_input_tokens += getattr(details, "cached_tokens", 0) or 0
+
+            msg = response.choices[0].message
+            if not msg.tool_calls:
+                turn.reply = (msg.content or "").strip()
+                self.history.append({"role": "assistant", "content": turn.reply})
+                return turn
+
+            assistant_msg = {
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {"id": c.id, "type": "function",
+                     "function": {"name": c.function.name, "arguments": c.function.arguments}}
+                    for c in msg.tool_calls
+                ],
+            }
             messages.append(assistant_msg)
             self.history.append(assistant_msg)
 
-            if response.stop_reason != "tool_use":
-                turn.reply = "".join(b.text for b in response.content if b.type == "text").strip()
-                return turn
-
-            results = []
-            for block in response.content:
-                if block.type != "tool_use":
-                    continue
-                output = self.tools.call(block.name, block.input)
-                turn.tool_calls.append(ToolCall(block.name, dict(block.input), output))
-                results.append({"type": "tool_result", "tool_use_id": block.id, "content": output})
-            tool_msg = {"role": "user", "content": results}
-            messages.append(tool_msg)
-            self.history.append(tool_msg)
+            for call in msg.tool_calls:
+                try:
+                    args = json.loads(call.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                    output = json.dumps({"erro": "Argumentos inválidos (JSON malformado)."}, ensure_ascii=False)
+                else:
+                    output = self.tools.call(call.function.name, args)
+                turn.tool_calls.append(ToolCall(call.function.name, args, output))
+                tool_msg = {"role": "tool", "tool_call_id": call.id, "content": output}
+                messages.append(tool_msg)
+                self.history.append(tool_msg)
 
         # Step limit reached: answer safely instead of looping forever
         turn.reply = ("Essa ficou mais complexa do que consigo resolver por aqui. "

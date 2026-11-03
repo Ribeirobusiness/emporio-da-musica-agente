@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Empório da Música customer service agent")
     parser.add_argument("--session", help="persist the conversation under this name (sessions/<name>.json)")
-    parser.add_argument("--model", help="Anthropic model id (default: EMPORIO_MODEL or claude-sonnet-5-5)")
+    parser.add_argument("--model", help="OpenAI model id (default: EMPORIO_MODEL or gpt-4.1-mini)")
     parser.add_argument("--debug", action="store_true", help="print tool calls and token usage")
     args = parser.parse_args(argv)
 
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
             for call in turn.tool_calls:
                 print(f"  [tool] {call.name}({json.dumps(call.input, ensure_ascii=False)})", file=sys.stderr)
                 print(f"         -> {call.output[:300]}{'...' if len(call.output) > 300 else ''}", file=sys.stderr)
-            print(f"  [tokens] in={turn.input_tokens} out={turn.output_tokens}", file=sys.stderr)
+            print(f"  [tokens] in={turn.input_tokens} (cached {turn.cached_input_tokens}) out={turn.output_tokens}", file=sys.stderr)
         print(f"\nDuda: {turn.reply}\n")
         if args.session:
             save_session(args.session, agent.history)

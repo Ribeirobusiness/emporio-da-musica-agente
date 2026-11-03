@@ -1,4 +1,4 @@
-"""Agent loop tests with a fake client (no network)."""
+"""Agent loop tests with a fake OpenAI client (no network, no API key)."""
 
 import json
 import sys
@@ -14,22 +14,22 @@ from emporio_agent.policies import load_sections  # noqa: E402
 from emporio_agent.tools import STORE_TZ, StoreTools  # noqa: E402
 
 
-class Block(NS):
-    def model_dump(self, exclude_none=True):
-        return {k: v for k, v in vars(self).items() if v is not None}
+def tool_call(call_id, name, args):
+    return NS(id=call_id, function=NS(name=name, arguments=json.dumps(args)))
 
 
-def response(blocks, stop):
-    return NS(content=blocks, stop_reason=stop, usage=NS(input_tokens=10, output_tokens=5))
+def response(content=None, tool_calls=None):
+    usage = NS(prompt_tokens=100, completion_tokens=20, prompt_tokens_details=NS(cached_tokens=0))
+    return NS(choices=[NS(message=NS(content=content, tool_calls=tool_calls))], usage=usage)
 
 
 class FakeClient:
-    """Scripted model: first asks for a tool, then answers with text."""
+    """Scripted model: returns the queued responses in order."""
 
     def __init__(self, script):
         self.script = list(script)
         self.calls = []
-        self.messages = self
+        self.chat = NS(completions=self)
 
     def create(self, **kwargs):
         self.calls.append(json.loads(json.dumps(kwargs["messages"], default=str)))
@@ -44,24 +44,31 @@ def make_agent(client):
 
 def test_tool_call_then_answer():
     client = FakeClient([
-        response([Block(type="tool_use", id="t1", name="detalhes_produto", input={"produto": "Takamine GD20"})], "tool_use"),
-        response([Block(type="text", text="O Takamine GD20 sai por R$ 2.199,00.")], "end_turn"),
+        response(tool_calls=[tool_call("c1", "detalhes_produto", {"produto": "Takamine GD20"})]),
+        response(content="O Takamine GD20 sai por R$ 2.199,00."),
     ])
     agent = make_agent(client)
     turn = agent.reply("Quanto custa o Takamine GD20?")
     assert turn.reply == "O Takamine GD20 sai por R$ 2.199,00."
     assert [c.name for c in turn.tool_calls] == ["detalhes_produto"]
     assert json.loads(turn.tool_calls[0].output)["preco_tabela"] == "R$ 2.199,00"
-    # second API call must carry the tool_result paired with the tool_use id
-    last_user = client.calls[1][-1]
-    assert last_user["role"] == "user" and last_user["content"][0]["tool_use_id"] == "t1"
-    # history: user, assistant(tool_use), user(tool_result), assistant(text)
-    assert [m["role"] for m in agent.history] == ["user", "assistant", "user", "assistant"]
+    # the second API call must carry the tool result paired with the call id
+    last = client.calls[1][-1]
+    assert last["role"] == "tool" and last["tool_call_id"] == "c1"
+    assert [m["role"] for m in agent.history] == ["user", "assistant", "tool", "assistant"]
+    assert turn.model_calls == 2 and turn.input_tokens == 200
+
+
+def test_malformed_arguments_do_not_crash():
+    bad = NS(id="c1", function=NS(name="detalhes_produto", arguments="{not json"))
+    agent = make_agent(FakeClient([response(tool_calls=[bad]), response(content="ok")]))
+    turn = agent.reply("oi")
+    assert "erro" in json.loads(turn.tool_calls[0].output)
+    assert turn.reply == "ok"
 
 
 def test_step_limit_stops_runaway_loops():
-    loop = [response([Block(type="tool_use", id=f"t{i}", name="status_da_loja", input={})], "tool_use")
-            for i in range(20)]
+    loop = [response(tool_calls=[tool_call(f"c{i}", "status_da_loja", {})]) for i in range(20)]
     agent = make_agent(FakeClient(loop))
     turn = agent.reply("oi")
     assert "encaminhe" in turn.reply
@@ -73,9 +80,9 @@ def test_trim_history_keeps_tool_pairs():
     for i in range(20):
         history += [
             {"role": "user", "content": f"msg {i}"},
-            {"role": "assistant", "content": [{"type": "tool_use", "id": f"t{i}"}]},
-            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"t{i}"}]},
-            {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{i}"}]},
+            {"role": "tool", "tool_call_id": f"c{i}", "content": "{}"},
+            {"role": "assistant", "content": "ok"},
         ]
     trimmed = trim_history(history, max_user_turns=3)
     assert trimmed[0] == {"role": "user", "content": "msg 17"}
