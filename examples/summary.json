@@ -12,10 +12,10 @@
     "simular_pagamento"
    ]
   ],
-  "input_tokens": 12381,
-  "cached_input_tokens": 7424,
-  "output_tokens": 367,
-  "cost_usd": 0.0015205499999999999
+  "input_tokens": 12811,
+  "cached_input_tokens": 9216,
+  "output_tokens": 361,
+  "cost_usd": 0.0014470499999999996
  },
  {
   "scenario": "02_preco_promocao_expirada",
@@ -28,10 +28,10 @@
    ],
    []
   ],
-  "input_tokens": 7329,
-  "cached_input_tokens": 6528,
-  "output_tokens": 161,
-  "cost_usd": 0.00070635
+  "input_tokens": 7696,
+  "cached_input_tokens": 7552,
+  "output_tokens": 187,
+  "cost_usd": 0.0007002
  },
  {
   "scenario": "03_status_pedido_com_verificacao",
@@ -47,10 +47,10 @@
     "encaminhar_para_atendente"
    ]
   ],
-  "input_tokens": 12427,
-  "cached_input_tokens": 11520,
-  "output_tokens": 284,
-  "cost_usd": 0.00117045
+  "input_tokens": 12954,
+  "cached_input_tokens": 11776,
+  "output_tokens": 323,
+  "cost_usd": 0.0012536999999999997
  },
  {
   "scenario": "04_arrependimento_devolucao",
@@ -66,10 +66,10 @@
     "encaminhar_para_atendente"
    ]
   ],
-  "input_tokens": 14360,
-  "cached_input_tokens": 12928,
-  "output_tokens": 301,
-  "cost_usd": 0.0013649999999999997
+  "input_tokens": 14909,
+  "cached_input_tokens": 13312,
+  "output_tokens": 310,
+  "cost_usd": 0.00142395
  },
  {
   "scenario": "05_fora_do_escopo_e_institucional",
@@ -84,9 +84,9 @@
     "consultar_politica"
    ]
   ],
-  "input_tokens": 9919,
-  "cached_input_tokens": 8704,
-  "output_tokens": 189,
-  "cost_usd": 0.0009484499999999999
+  "input_tokens": 10340,
+  "cached_input_tokens": 9088,
+  "output_tokens": 203,
+  "cost_usd": 0.0009912
  }
 ]
