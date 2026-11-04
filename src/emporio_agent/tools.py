@@ -455,7 +455,8 @@ TOOL_SCHEMAS: list[dict] = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "numero_pedido": {"type": "string"},
+                "numero_pedido": {"type": "string", "description": "Número do pedido como o cliente informou. "
+                                  "Os números da loja são curtos (ex.: '8', '23'): não peça um número 'completo'."},
                 "email_ou_telefone": {"type": "string"},
             },
             "required": ["numero_pedido", "email_ou_telefone"],
