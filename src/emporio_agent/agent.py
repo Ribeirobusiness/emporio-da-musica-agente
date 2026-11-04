@@ -20,7 +20,7 @@ from openai import OpenAI, OpenAIError
 from .prompts import build_system_prompt
 from .tools import STORE_TZ, TOOL_SCHEMAS, StoreTools
 
-DEFAULT_MODEL = "gpt-4.1-mini"
+DEFAULT_MODEL = "gpt-4o-mini"
 MAX_TOOL_STEPS = 8
 MAX_TURNS_IN_CONTEXT = 12  # user turns kept in the prompt; older ones are dropped
 FALLBACK_REPLY = (

@@ -3,7 +3,7 @@ transcripts (with the tool calls behind each answer) to examples/*.md.
 
 Usage:
     python scripts/run_examples.py                                   # all scenarios, default model -> examples/
-    python scripts/run_examples.py --model gpt-4o-mini --out benchmarks/gpt-4o-mini
+    python scripts/run_examples.py --model gpt-4.1-mini --out benchmarks/gpt-4.1-mini
     python scripts/run_examples.py --only 3                          # only scenario 3
 
 Every transcript in examples/ and benchmarks/ was produced by this script;
