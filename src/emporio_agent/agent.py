@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 
 from openai import OpenAI, OpenAIError
@@ -53,6 +54,13 @@ class Turn:
     cached_input_tokens: int = 0
     output_tokens: int = 0
     model_calls: int = 0
+
+
+def to_whatsapp(text: str) -> str:
+    """WhatsApp bold is *one* asterisk; markdown **bold** shows up with the asterisks.
+    gpt-4o-mini kept using ** in about 1 of 5 conversations despite the prompt, so it is
+    converted here instead of relying on the model."""
+    return re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
 
 
 def trim_history(messages: list[dict], max_user_turns: int = MAX_TURNS_IN_CONTEXT) -> list[dict]:
@@ -112,7 +120,7 @@ class StoreAgent:
 
             msg = response.choices[0].message
             if not msg.tool_calls:
-                turn.reply = (msg.content or "").strip()
+                turn.reply = to_whatsapp((msg.content or "").strip())
                 self.history.append({"role": "assistant", "content": turn.reply})
                 return turn
 

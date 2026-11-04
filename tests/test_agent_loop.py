@@ -59,6 +59,13 @@ def test_tool_call_then_answer():
     assert turn.model_calls == 2 and turn.input_tokens == 200
 
 
+def test_markdown_bold_becomes_whatsapp_bold():
+    agent = make_agent(FakeClient([response(content="Seu protocolo é **EM-20261104-1234**.")]))
+    turn = agent.reply("Registra pra mim?")
+    assert turn.reply == "Seu protocolo é *EM-20261104-1234*."
+    assert agent.history[-1]["content"] == turn.reply
+
+
 def test_malformed_arguments_do_not_crash():
     bad = NS(id="c1", function=NS(name="detalhes_produto", arguments="{not json"))
     agent = make_agent(FakeClient([response(tool_calls=[bad]), response(content="ok")]))
