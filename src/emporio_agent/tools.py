@@ -139,6 +139,11 @@ class StoreTools:
             ]["description"].tolist()
             if ended:
                 view["promocoes_encerradas"] = sorted(set(ended))
+                if not has_promo:
+                    view["sobre_promocoes_encerradas"] = (
+                        "Essas promoções já acabaram: o preço atual é o de tabela. O desconto de 5% no PIX não é "
+                        f"promoção e continua valendo ({brl(discounted_price(price, PIX_DISCOUNT_PERCENT))})."
+                    )
         return view
 
     def buscar_produtos(

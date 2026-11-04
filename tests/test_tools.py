@@ -71,6 +71,12 @@ def test_takamine_gd20_price_and_expired_promo(tools):
     assert result["preco_no_pix"].startswith("R$ 2.089,05")
 
 
+def test_ended_promo_says_pix_discount_still_applies(tools):
+    # gpt-4o-mini once told the customer the PIX discount had ended along with the promotion
+    note = tools.detalhes_produto("Takamine GD20")["sobre_promocoes_encerradas"]
+    assert "R$ 2.089,05" in note and "continua" in note
+
+
 def test_active_promo_is_not_combined_with_pix(tools):
     result = tools.detalhes_produto("Taylor 110e")
     assert result["promocao_ativa"]["desconto_percentual"] == 8
