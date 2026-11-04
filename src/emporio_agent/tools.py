@@ -94,6 +94,7 @@ class StoreTools:
         self.sections = policy_sections
         self.now_fn = now_fn or (lambda: datetime.now(STORE_TZ))
         self.escalation_log = Path(escalation_log)
+        self._tickets: dict[str, str] = {}  # motivo -> protocol, one StoreTools per conversation
 
     # ------------------------------------------------------------------ catalog
     def _product_view(self, row: dict, detailed: bool = False) -> dict:
@@ -375,6 +376,9 @@ class StoreTools:
 
     # ------------------------------------------------------------------ escalation
     def encaminhar_para_atendente(self, motivo: str, resumo: str, contato_cliente: str | None = None) -> dict:
+        if motivo in self._tickets:  # the model sometimes calls twice for the same case
+            return {"protocolo": self._tickets[motivo], "prazo_retorno": "até 24 horas úteis",
+                    "registrado": True, "ja_registrado": True}
         now = self.now_fn()
         protocol = "EM-" + now.strftime("%Y%m%d") + "-" + "".join(random.choices(string.digits, k=4))
         record = {"protocolo": protocol, "criado_em": now.isoformat(), "motivo": motivo,
@@ -382,6 +386,7 @@ class StoreTools:
         self.escalation_log.parent.mkdir(parents=True, exist_ok=True)
         with self.escalation_log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        self._tickets[motivo] = protocol
         return {"protocolo": protocol, "prazo_retorno": "até 24 horas úteis",
                 "registrado": True}
 

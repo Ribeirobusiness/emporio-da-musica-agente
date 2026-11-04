@@ -189,6 +189,15 @@ def test_escalation_is_logged(tools, tmp_path):
     assert out["protocolo"] in logged
 
 
+def test_same_case_is_not_escalated_twice(tools, tmp_path):
+    first = tools.encaminhar_para_atendente("devolucao_ou_troca", "Pedido 4, arrependimento", "lucas.mendes@jmail.com")
+    again = tools.encaminhar_para_atendente("devolucao_ou_troca", "Pedido 4, devolução", "lucas.mendes@jmail.com")
+    assert again["protocolo"] == first["protocolo"] and again["ja_registrado"] is True
+    other = tools.encaminhar_para_atendente("reclamacao", "Atendimento demorado", "lucas.mendes@jmail.com")
+    assert other["protocolo"] != first["protocolo"]
+    assert len((tmp_path / "esc.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+
+
 def test_dispatch_returns_json_errors_instead_of_raising(tools):
     out = json.loads(tools.call("detalhes_produto", {}))
     assert "erro" in out
