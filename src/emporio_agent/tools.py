@@ -23,6 +23,7 @@ from .data import (
     PRODUCT_STATUS_PT,
     StoreData,
     digits_only,
+    discounted,
     normalize_text,
     payment_label,
 )
@@ -121,7 +122,7 @@ class StoreTools:
             }
             view["preco_no_pix"] = brl(float(promo_price)) + " (PIX não acumula com promoção)"
         else:
-            view["preco_no_pix"] = brl(round(price * (1 - PIX_DISCOUNT), 2)) + " (5% de desconto no PIX)"
+            view["preco_no_pix"] = brl(discounted(price, PIX_DISCOUNT * 100)) + " (5% de desconto no PIX)"
         if detailed:
             view["descricao"] = row["description"]
             view["especificacoes"] = row["specs"]
@@ -249,7 +250,7 @@ class StoreTools:
             promo = row.get("promo_price")
             has_promo = promo is not None and promo == promo
             unit = float(promo) if has_promo else float(row["price_brl"])
-            unit_pix = unit if has_promo else round(unit * (1 - PIX_DISCOUNT), 2)
+            unit_pix = unit if has_promo else discounted(unit, PIX_DISCOUNT * 100)
             total += unit * qty
             total_pix += unit_pix * qty
             lines.append({"produto": row["name"], "quantidade": qty, "preco_unitario": brl(unit),

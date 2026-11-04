@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import ROUND_HALF_UP, Decimal
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,13 @@ PAYMENT_PT = {
     "boleto": "boleto bancário",
 }
 
+
+
+def discounted(price: float, percent: float) -> float:
+    """Price after a percent discount, rounded half-up to the cent in decimal
+    arithmetic. Plain float round() turns 599.90 * 0.95 = 569.905 into 569.90."""
+    value = Decimal(str(price)) * (Decimal(100) - Decimal(str(percent))) / Decimal(100)
+    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 def normalize_text(text: str) -> str:
     """Lowercase, strip accents and collapse spaces, for accent-insensitive search."""
@@ -133,7 +141,7 @@ def _load_products(data_dir: Path, categories: pd.DataFrame, promotions: pd.Data
     )
     products = products.merge(active, on="product_id", how="left")
     products["promo_price"] = products.apply(
-        lambda r: round(r["price_brl"] * (1 - r["promo_percent"] / 100), 2)
+        lambda r: discounted(r["price_brl"], r["promo_percent"])
         if pd.notna(r["promo_percent"])
         else None,
         axis=1,

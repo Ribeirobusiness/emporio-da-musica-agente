@@ -60,6 +60,12 @@ def test_takamine_gd20_price_and_expired_promo(tools):
     assert result["preco_no_pix"].startswith("R$ 2.089,05")
 
 
+def test_pix_rounds_half_up_to_the_cent(tools):
+    # 599.90 * 0.95 = 569.905; float round() gives 569.90, commercial rounding gives 569.91
+    assert tools.simular_pagamento([{"produto_id": 81}])["pix"] == "R$ 569,91"
+    assert tools.detalhes_produto("Yamaha C40")["preco_no_pix"].startswith("R$ 569,91")
+
+
 def test_active_promo_is_not_combined_with_pix(tools):
     result = tools.detalhes_produto("Taylor 110e")
     assert result["promocao_ativa"]["desconto_percentual"] == 8
