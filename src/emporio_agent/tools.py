@@ -277,8 +277,9 @@ class StoreTools:
             "debito_ou_boleto": brl(total) + " (à vista, boleto compensa em até 3 dias úteis)",
             "cartao_credito": f"até {n}x de {brl(value)} sem juros",
             "combinar_formas_de_pagamento": total > COMBINED_PAYMENT_MIN,
-            "regra_aplicada": "Parcela mínima: R$ 50 até 3x, R$ 80 de 4x a 6x, R$ 100 de 7x a 12x. "
-                              "PIX dá 5% só em itens sem promoção.",
+            "regra_aplicada": "Valor mínimo de CADA parcela: R$ 50 em até 3x, R$ 80 de 4x a 6x, "
+                              "R$ 100 de 7x a 12x. O parcelamento informado acima já aplica essa regra; "
+                              "não é preciso repeti-la ao cliente. PIX dá 5% só em itens sem promoção.",
         }
 
     # ------------------------------------------------------------------ orders
@@ -321,21 +322,33 @@ class StoreTools:
                 result["alerta"] = "Previsão de entrega já passou e o pedido ainda consta como enviado: " \
                                    "ofereça encaminhar para a equipe verificar com a transportadora."
             if order["status"] == "delivered":
-                # The data has no actual receipt date, only the estimate. Python does the
-                # date math so the model does not confirm a return window on the customer's word.
-                days = (today - date.fromisoformat(order["estimated_delivery"])).days
-                result["dias_desde_a_previsao_de_entrega"] = days
-                if days > 7:
-                    result["alerta"] = (
-                        f"A PREVISÃO de entrega foi há {days} dias; o sistema não registra a data REAL de recebimento. "
-                        "Se o cliente pedir devolução por arrependimento (7 dias) ou troca: não diga que está no prazo, "
-                        "nem que perdeu o prazo, nem que o pedido foi entregue há X dias. Diga que a data no sistema não "
-                        "bate com a que ele informou, chame encaminhar_para_atendente agora, sem pedir confirmação "
-                        "(o contato usado na verificação serve), e diga que a equipe vai confirmar a data e responder."
-                    )
+                result.update(self._post_delivery_windows(order, today))
         if order.get("notes"):
             result["observacao"] = order["notes"]
         return result
+
+    @staticmethod
+    def _post_delivery_windows(order: dict, today: date) -> dict:
+        """Facts the model needs for the 7-day and 30-day rules (manual 4.1 to 4.3)
+        without doing date math. The data has no actual receipt date, only the
+        estimate, so the model must neither confirm nor deny a window on the
+        customer's word."""
+        since_purchase = (today - date.fromisoformat(order["order_date"])).days
+        since_estimate = (today - date.fromisoformat(order["estimated_delivery"])).days
+        out = {"dias_desde_a_compra": since_purchase,
+               "dias_desde_a_previsao_de_entrega": since_estimate}
+        if since_estimate > 7:
+            due = date.fromisoformat(order["estimated_delivery"]).strftime("%d/%m/%Y")
+            out["alerta"] = (
+                f"A PREVISÃO de entrega era {due} (há {since_estimate} dias); o sistema não registra a data REAL "
+                "de recebimento. Se o cliente pedir devolução por arrependimento ou troca por preferência "
+                "(7 dias após o recebimento, manual 4.1 e 4.3): não confirme nem negue o prazo, e não diga que o "
+                "pedido foi entregue há X dias. Diga que a data no sistema não bate com a que ele informou, chame "
+                "encaminhar_para_atendente agora, sem pedir confirmação (o contato usado na verificação serve), e "
+                "diga que a equipe vai confirmar a data e responder. Troca por defeito na loja vale até 30 dias "
+                "após a compra; depois disso, segue pela garantia (seção 8)."
+            )
+        return out
 
     # ------------------------------------------------------------------ store hours
     def status_da_loja(self) -> dict:
@@ -384,6 +397,10 @@ class StoreTools:
 
     # ------------------------------------------------------------------ escalation
     def encaminhar_para_atendente(self, motivo: str, resumo: str, contato_cliente: str | None = None) -> dict:
+        if not (contato_cliente or "").strip():
+            # A ticket nobody can answer breaks the 24h promise; ask for a contact first.
+            return {"registrado": False,
+                    "erro": "Falta contato do cliente. Peça um telefone ou e-mail para retorno antes de registrar."}
         if motivo in self._tickets:  # the model sometimes calls twice for the same case
             return {"protocolo": self._tickets[motivo], "prazo_retorno": "até 24 horas úteis",
                     "registrado": True, "ja_registrado": True}
@@ -504,9 +521,9 @@ TOOL_SCHEMAS: list[dict] = [
                 "motivo": {"type": "string", "enum": ["reclamacao", "devolucao_ou_troca", "pedido_atrasado",
                                                        "duvida_nao_coberta", "pedido_do_cliente"]},
                 "resumo": {"type": "string", "description": "Resumo objetivo do caso para o atendente."},
-                "contato_cliente": {"type": "string"},
+                "contato_cliente": {"type": "string", "description": "Telefone ou e-mail para retorno. Obrigatório."},
             },
-            "required": ["motivo", "resumo"],
+            "required": ["motivo", "resumo", "contato_cliente"],
         },
     },
 ]

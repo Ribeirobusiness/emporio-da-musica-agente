@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import ROUND_HALF_UP, Decimal
 import unicodedata
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -45,6 +46,8 @@ PAYMENT_PT = {
     "debit": "cartão de débito",
     "boleto": "boleto bancário",
 }
+
+
 
 
 def normalize_text(text: str) -> str:
