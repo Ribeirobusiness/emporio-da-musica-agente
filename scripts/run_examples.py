@@ -158,9 +158,15 @@ def main() -> None:
             "cost_usd": cost_usd(agent.model, tin, tcached, tout),
         })
         print(f"wrote {path}")
-    (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    summary_path = out_dir / "summary.json"
+    if args.only and summary_path.exists():
+        # Partial run: replace only the scenarios that were re-run, keep the rest.
+        rerun = {s["scenario"] for s in summary}
+        kept = [s for s in json.loads(summary_path.read_text(encoding="utf-8")) if s["scenario"] not in rerun]
+        summary = sorted(kept + summary, key=lambda s: s["scenario"])
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     total = sum(s["cost_usd"] or 0 for s in summary)
-    print(f"total estimated cost: US$ {total:.4f}")
+    print(f"total estimated cost in {args.out}/summary.json: US$ {total:.4f}")
 
 
 if __name__ == "__main__":
