@@ -118,6 +118,19 @@ def test_late_shipped_order_raises_alert(tmp_path):
     assert "alerta" in result
 
 
+def test_delivered_order_exposes_return_windows(tmp_path):
+    # Order 4: bought 2025-12-10, delivery estimate 2025-12-22, status delivered.
+    recent = make_tools(datetime(2025, 12, 25, 10, 0, tzinfo=STORE_TZ), tmp_path)
+    result = recent.consultar_pedido(4, "lucas.mendes@jmail.com")
+    assert result["dias_desde_a_previsao_de_entrega"] == 3
+    assert "alerta_prazos" not in result
+    old = make_tools(datetime(2026, 11, 4, 10, 0, tzinfo=STORE_TZ), tmp_path)
+    result = old.consultar_pedido(4, "lucas.mendes@jmail.com")
+    assert result["dias_desde_a_compra"] == 329
+    assert result["dias_desde_a_previsao_de_entrega"] == 317
+    assert "não confirme a devolução" in result["alerta_prazos"]
+
+
 def test_cancelled_order_shows_reason(tools):
     result = tools.consultar_pedido(20, "thiago.barbosa@jmail.com")
     assert result["status"] == "cancelado"

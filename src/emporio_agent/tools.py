@@ -305,9 +305,30 @@ class StoreTools:
             if order["status"] == "shipped" and date.fromisoformat(order["estimated_delivery"]) < today:
                 result["alerta"] = "Previsão de entrega já passou e o pedido ainda consta como enviado: " \
                                    "ofereça encaminhar para a equipe verificar com a transportadora."
+            if order["status"] == "delivered":
+                result.update(self._post_delivery_windows(order, today))
         if order.get("notes"):
             result["observacao"] = order["notes"]
         return result
+
+    @staticmethod
+    def _post_delivery_windows(order: dict, today: date) -> dict:
+        """Facts the model needs to apply the 7-day and 30-day rules (manual 4.1-4.3)
+        without doing date math. The data has no actual receipt date, only the
+        estimate, so the model must not confirm a deadline the record contradicts."""
+        since_purchase = (today - date.fromisoformat(order["order_date"])).days
+        since_delivery = (today - date.fromisoformat(order["estimated_delivery"])).days
+        out = {"dias_desde_a_compra": since_purchase,
+               "dias_desde_a_previsao_de_entrega": since_delivery}
+        if since_delivery > 7:
+            out["alerta_prazos"] = (
+                "O sistema não registra a data exata de recebimento. Pela previsão de entrega, já se passaram "
+                f"{since_delivery} dias, acima dos 7 dias de arrependimento e de troca por preferência "
+                f"(manual 4.1 e 4.3); a troca por defeito vale até 30 dias após a compra (há {since_purchase} dias). "
+                "Se o relato do cliente divergir do registro, não confirme a devolução: explique a regra e "
+                "encaminhe para a equipe verificar a data de recebimento."
+            )
+        return out
 
     # ------------------------------------------------------------------ store hours
     def status_da_loja(self) -> dict:
