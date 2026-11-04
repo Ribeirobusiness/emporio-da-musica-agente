@@ -319,9 +319,10 @@ class StoreTools:
                 result["dias_desde_a_previsao_de_entrega"] = days
                 if days > 7:
                     result["alerta"] = (
-                        f"A previsão de entrega foi há {days} dias e o sistema não tem a data real de recebimento. "
-                        "Em pedido de arrependimento (7 dias do recebimento) ou troca, não confirme que está no prazo: "
-                        "registre o caso e diga que a equipe vai confirmar a data de recebimento."
+                        f"Se o cliente pedir devolução por arrependimento (7 dias) ou troca, NÃO diga que está no prazo: "
+                        f"a previsão de entrega foi há {days} dias e o sistema não registra a data real de recebimento. "
+                        "Explique isso, chame encaminhar_para_atendente agora (o contato usado na verificação serve) "
+                        "e diga que a equipe vai confirmar a data de recebimento."
                     )
         if order.get("notes"):
             result["observacao"] = order["notes"]
