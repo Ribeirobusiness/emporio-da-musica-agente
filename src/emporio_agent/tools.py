@@ -22,6 +22,7 @@ from .data import (
     ORDER_STATUS_PT,
     PRODUCT_STATUS_PT,
     StoreData,
+    discounted_price,
     digits_only,
     normalize_text,
     payment_label,
@@ -29,7 +30,7 @@ from .data import (
 from .policies import SECTION_KEYS
 
 STORE_TZ = ZoneInfo("America/Campo_Grande")
-PIX_DISCOUNT = 0.05
+PIX_DISCOUNT_PERCENT = 5
 COMBINED_PAYMENT_MIN = 2000.00
 
 # Section 3.1 of the manual. "Até 3x ... sem valor mínimo de parcela (exceto
@@ -121,7 +122,7 @@ class StoreTools:
             }
             view["preco_no_pix"] = brl(float(promo_price)) + " (PIX não acumula com promoção)"
         else:
-            view["preco_no_pix"] = brl(round(price * (1 - PIX_DISCOUNT), 2)) + " (5% de desconto no PIX)"
+            view["preco_no_pix"] = brl(discounted_price(price, PIX_DISCOUNT_PERCENT)) + " (5% de desconto no PIX)"
         if detailed:
             view["descricao"] = row["description"]
             view["especificacoes"] = row["specs"]
@@ -249,7 +250,7 @@ class StoreTools:
             promo = row.get("promo_price")
             has_promo = promo is not None and promo == promo
             unit = float(promo) if has_promo else float(row["price_brl"])
-            unit_pix = unit if has_promo else round(unit * (1 - PIX_DISCOUNT), 2)
+            unit_pix = unit if has_promo else discounted_price(unit, PIX_DISCOUNT_PERCENT)
             total += unit * qty
             total_pix += unit_pix * qty
             lines.append({"produto": row["name"], "quantidade": qty, "preco_unitario": brl(unit),
@@ -258,7 +259,7 @@ class StoreTools:
         return {
             "itens": lines,
             "total": brl(total),
-            "pix": brl(total_pix),
+            "pix": brl(round(total_pix, 2)),
             "debito_ou_boleto": brl(total) + " (à vista, boleto compensa em até 3 dias úteis)",
             "cartao_credito": f"até {n}x de {brl(value)} sem juros",
             "combinar_formas_de_pagamento": total > COMBINED_PAYMENT_MIN,

@@ -94,6 +94,15 @@ def test_installments_for_expensive_item(tools):
     assert sim["combinar_formas_de_pagamento"] is True
 
 
+def test_pix_price_rounds_half_up_to_the_cent(tools):
+    # 599.90 * 0.95 = 569.905 exactly; float round() gave 569.90 (binary 569.90499...)
+    assert tools.detalhes_produto("81")["preco_no_pix"].startswith("R$ 569,91")
+    sim = tools.simular_pagamento([{"produto_id": 81, "quantidade": 2}])
+    assert sim["pix"] == "R$ 1.139,82"
+    listed = {p["id"]: p["preco_no_pix"] for p in tools.buscar_produtos(categoria="Violões", preco_max=1000)["produtos"]}
+    assert listed[83].startswith("R$ 408,41")  # 429.90 * 0.95 = 408.405
+
+
 # ----------------------------------------------------------------- orders
 def test_order_requires_matching_contact(tools):
     denied = tools.consultar_pedido(8, "someone@else.com")

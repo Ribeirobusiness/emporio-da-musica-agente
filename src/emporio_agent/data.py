@@ -10,11 +10,20 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import pandas as pd
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+
+
+def discounted_price(price: float, percent: float) -> float:
+    """Price after a percentage discount, rounded half-up to the cent on the exact
+    decimal value. Plain round() works on the binary float and drifts a cent:
+    round(599.90 * 0.95, 2) == 569.90, while 569.905 rounds to 569.91."""
+    value = Decimal(str(price)) * (Decimal(100) - Decimal(str(percent))) / Decimal(100)
+    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 # Customer-facing labels (the store talks to customers in Portuguese)
 PRODUCT_STATUS_PT = {
@@ -133,7 +142,7 @@ def _load_products(data_dir: Path, categories: pd.DataFrame, promotions: pd.Data
     )
     products = products.merge(active, on="product_id", how="left")
     products["promo_price"] = products.apply(
-        lambda r: round(r["price_brl"] * (1 - r["promo_percent"] / 100), 2)
+        lambda r: discounted_price(r["price_brl"], r["promo_percent"])
         if pd.notna(r["promo_percent"])
         else None,
         axis=1,
