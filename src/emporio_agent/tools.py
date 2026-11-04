@@ -262,8 +262,9 @@ class StoreTools:
             "debito_ou_boleto": brl(total) + " (à vista, boleto compensa em até 3 dias úteis)",
             "cartao_credito": f"até {n}x de {brl(value)} sem juros",
             "combinar_formas_de_pagamento": total > COMBINED_PAYMENT_MIN,
-            "regra_aplicada": "Parcela mínima: R$ 50 até 3x, R$ 80 de 4x a 6x, R$ 100 de 7x a 12x. "
-                              "PIX dá 5% só em itens sem promoção.",
+            "regra_aplicada": "Valor mínimo de CADA parcela: R$ 50 em até 3x, R$ 80 de 4x a 6x, "
+                              "R$ 100 de 7x a 12x. O parcelamento informado acima já aplica essa regra; "
+                              "não é preciso repeti-la ao cliente. PIX dá 5% só em itens sem promoção.",
         }
 
     # ------------------------------------------------------------------ orders
