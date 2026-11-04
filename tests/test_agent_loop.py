@@ -8,7 +8,7 @@ from types import SimpleNamespace as NS
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from emporio_agent.agent import StoreAgent, trim_history  # noqa: E402
+from emporio_agent.agent import StoreAgent, to_whatsapp, trim_history  # noqa: E402
 from emporio_agent.data import load_data  # noqa: E402
 from emporio_agent.policies import load_sections  # noqa: E402
 from emporio_agent.tools import STORE_TZ, StoreTools  # noqa: E402
@@ -87,3 +87,9 @@ def test_trim_history_keeps_tool_pairs():
     trimmed = trim_history(history, max_user_turns=3)
     assert trimmed[0] == {"role": "user", "content": "msg 17"}
     assert len(trimmed) == 12
+
+
+def test_markdown_bold_becomes_whatsapp_bold():
+    assert to_whatsapp("Protocolo **EM-1** e **Total**: R$ 1") == "Protocolo *EM-1* e *Total*: R$ 1"
+    client = FakeClient([response(content="- **Produto**: Kala")])
+    assert make_agent(client).reply("oi").reply == "- *Produto*: Kala"
