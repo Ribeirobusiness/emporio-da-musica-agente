@@ -321,12 +321,14 @@ class StoreTools:
         out = {"dias_desde_a_compra": since_purchase,
                "dias_desde_a_previsao_de_entrega": since_delivery}
         if since_delivery > 7:
+            due = date.fromisoformat(order["estimated_delivery"]).strftime("%d/%m/%Y")
             out["alerta_prazos"] = (
-                "O sistema não registra a data exata de recebimento. Pela previsão de entrega, já se passaram "
-                f"{since_delivery} dias, acima dos 7 dias de arrependimento e de troca por preferência "
-                f"(manual 4.1 e 4.3); a troca por defeito vale até 30 dias após a compra (há {since_purchase} dias). "
-                "Se o relato do cliente divergir do registro, não confirme a devolução: explique a regra e "
-                "encaminhe para a equipe verificar a data de recebimento."
+                f"A entrega estava prevista para {due} (há {since_delivery} dias), mas o sistema não registra a "
+                "data real de recebimento. Arrependimento e troca por preferência valem até 7 dias após o "
+                "recebimento (manual 4.1 e 4.3). Troca por defeito na loja vale até 30 dias após a compra; depois "
+                "disso, defeito segue pela garantia (seção 8). Se o cliente disser que recebeu há menos de 7 dias, "
+                "não confirme nem negue a devolução: diga que o registro aponta entrega prevista para "
+                f"{due}, explique a regra e ofereça encaminhar para a equipe confirmar a data de recebimento."
             )
         return out
 

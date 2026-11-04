@@ -128,7 +128,8 @@ def test_delivered_order_exposes_return_windows(tmp_path):
     result = old.consultar_pedido(4, "lucas.mendes@jmail.com")
     assert result["dias_desde_a_compra"] == 329
     assert result["dias_desde_a_previsao_de_entrega"] == 317
-    assert "não confirme a devolução" in result["alerta_prazos"]
+    assert "22/12/2025" in result["alerta_prazos"]
+    assert "não confirme nem negue" in result["alerta_prazos"]
 
 
 def test_cancelled_order_shows_reason(tools):
