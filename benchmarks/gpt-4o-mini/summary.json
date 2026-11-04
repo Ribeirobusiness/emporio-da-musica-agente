@@ -1,0 +1,89 @@
+[
+ {
+  "scenario": "01_catalogo_violoes_ate_1000",
+  "model": "gpt-4o-mini",
+  "customer_messages": 2,
+  "model_calls": 4,
+  "tool_calls": [
+   [
+    "buscar_produtos"
+   ],
+   [
+    "simular_pagamento"
+   ]
+  ],
+  "input_tokens": 11857,
+  "cached_input_tokens": 8448,
+  "output_tokens": 371,
+  "cost_usd": 0.00136755
+ },
+ {
+  "scenario": "02_preco_promocao_expirada",
+  "model": "gpt-4o-mini",
+  "customer_messages": 2,
+  "model_calls": 3,
+  "tool_calls": [
+   [
+    "detalhes_produto"
+   ],
+   []
+  ],
+  "input_tokens": 6585,
+  "cached_input_tokens": 6016,
+  "output_tokens": 138,
+  "cost_usd": 0.00061935
+ },
+ {
+  "scenario": "03_status_pedido_com_verificacao",
+  "model": "gpt-4o-mini",
+  "customer_messages": 3,
+  "model_calls": 5,
+  "tool_calls": [
+   [],
+   [
+    "consultar_pedido"
+   ],
+   [
+    "encaminhar_para_atendente"
+   ]
+  ],
+  "input_tokens": 11965,
+  "cached_input_tokens": 11136,
+  "output_tokens": 330,
+  "cost_usd": 0.00115755
+ },
+ {
+  "scenario": "04_arrependimento_devolucao",
+  "model": "gpt-4o-mini",
+  "customer_messages": 2,
+  "model_calls": 3,
+  "tool_calls": [
+   [],
+   [
+    "consultar_pedido"
+   ]
+  ],
+  "input_tokens": 6903,
+  "cached_input_tokens": 4224,
+  "output_tokens": 183,
+  "cost_usd": 0.0008284499999999999
+ },
+ {
+  "scenario": "05_fora_do_escopo_e_institucional",
+  "model": "gpt-4o-mini",
+  "customer_messages": 3,
+  "model_calls": 4,
+  "tool_calls": [
+   [],
+   [],
+   [
+    "consultar_politica",
+    "consultar_politica"
+   ]
+  ],
+  "input_tokens": 8970,
+  "cached_input_tokens": 7936,
+  "output_tokens": 191,
+  "cost_usd": 0.0008648999999999999
+ }
+]
