@@ -312,6 +312,17 @@ class StoreTools:
             if order["status"] == "shipped" and date.fromisoformat(order["estimated_delivery"]) < today:
                 result["alerta"] = "Previsão de entrega já passou e o pedido ainda consta como enviado: " \
                                    "ofereça encaminhar para a equipe verificar com a transportadora."
+            if order["status"] == "delivered":
+                # The data has no actual receipt date, only the estimate. Python does the
+                # date math so the model does not confirm a return window on the customer's word.
+                days = (today - date.fromisoformat(order["estimated_delivery"])).days
+                result["dias_desde_a_previsao_de_entrega"] = days
+                if days > 7:
+                    result["alerta"] = (
+                        f"A previsão de entrega foi há {days} dias e o sistema não tem a data real de recebimento. "
+                        "Em pedido de arrependimento (7 dias do recebimento) ou troca, não confirme que está no prazo: "
+                        "registre o caso e diga que a equipe vai confirmar a data de recebimento."
+                    )
         if order.get("notes"):
             result["observacao"] = order["notes"]
         return result

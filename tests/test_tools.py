@@ -138,6 +138,19 @@ def test_late_shipped_order_raises_alert(tmp_path):
     assert "alerta" in result
 
 
+def test_delivered_order_reports_days_since_delivery_estimate(tmp_path):
+    # Order 4: delivered, estimate 2025-12-22. A customer claiming "received two days ago"
+    # must not be told the 7-day return window still applies without the team checking.
+    recent = make_tools(datetime(2025, 12, 25, 10, 0, tzinfo=STORE_TZ), tmp_path)
+    fresh = recent.consultar_pedido(4, "lucas.mendes@jmail.com")
+    assert fresh["dias_desde_a_previsao_de_entrega"] == 3
+    assert "alerta" not in fresh
+    later = make_tools(datetime(2026, 11, 4, 10, 0, tzinfo=STORE_TZ), tmp_path)
+    old = later.consultar_pedido(4, "lucas.mendes@jmail.com")
+    assert old["dias_desde_a_previsao_de_entrega"] == 317
+    assert "7 dias" in old["alerta"]
+
+
 def test_cancelled_order_shows_reason(tools):
     result = tools.consultar_pedido(20, "thiago.barbosa@jmail.com")
     assert result["status"] == "cancelado"
