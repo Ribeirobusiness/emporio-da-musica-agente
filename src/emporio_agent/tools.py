@@ -376,6 +376,10 @@ class StoreTools:
 
     # ------------------------------------------------------------------ escalation
     def encaminhar_para_atendente(self, motivo: str, resumo: str, contato_cliente: str | None = None) -> dict:
+        if not (contato_cliente or "").strip():
+            # A ticket nobody can answer breaks the 24h promise; ask for a contact first.
+            return {"registrado": False,
+                    "erro": "Falta contato do cliente. Peça um telefone ou e-mail para retorno antes de registrar."}
         now = self.now_fn()
         protocol = "EM-" + now.strftime("%Y%m%d") + "-" + "".join(random.choices(string.digits, k=4))
         record = {"protocolo": protocol, "criado_em": now.isoformat(), "motivo": motivo,
@@ -490,9 +494,9 @@ TOOL_SCHEMAS: list[dict] = [
                 "motivo": {"type": "string", "enum": ["reclamacao", "devolucao_ou_troca", "pedido_atrasado",
                                                        "duvida_nao_coberta", "pedido_do_cliente"]},
                 "resumo": {"type": "string", "description": "Resumo objetivo do caso para o atendente."},
-                "contato_cliente": {"type": "string"},
+                "contato_cliente": {"type": "string", "description": "Telefone ou e-mail para retorno. Obrigatório."},
             },
-            "required": ["motivo", "resumo"],
+            "required": ["motivo", "resumo", "contato_cliente"],
         },
     },
 ]

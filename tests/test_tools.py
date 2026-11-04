@@ -169,6 +169,12 @@ def test_escalation_is_logged(tools, tmp_path):
     assert out["protocolo"] in logged
 
 
+def test_escalation_requires_a_contact(tools, tmp_path):
+    out = tools.encaminhar_para_atendente("devolucao_ou_troca", "Cliente quer devolver", "")
+    assert out["registrado"] is False
+    assert not (tmp_path / "esc.jsonl").exists()
+
+
 def test_dispatch_returns_json_errors_instead_of_raising(tools):
     out = json.loads(tools.call("detalhes_produto", {}))
     assert "erro" in out
