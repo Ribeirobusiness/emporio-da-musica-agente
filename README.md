@@ -8,11 +8,12 @@ From [`examples/02_preco_promocao_expirada.md`](examples/02_preco_promocao_expir
 
 > **Cliente:** Quanto custa o Takamine GD20?
 >
-> **Duda:** O Takamine GD20 Dreadnought Natural está custando R$ 2.199,00. Se você optar pelo pagamento via PIX, sai por R$ 2.089,05, com 5% de desconto. [...]
+> **Duda:** O Takamine GD20 Dreadnought Natural está disponível por R$ 2.199,00. Se você fizer a compra via PIX, consegue um descontinho de 5%, saindo por R$ 2.089,05. [...]
 >
 > **Cliente:** Mas eu vi que ele estava na Oferta Especial com desconto, ainda vale?
 >
-> **Duda:** A Oferta Especial que você viu já acabou, então o preço atual é o de tabela mesmo: R$ 2.199,00. [...]
+> **Duda:** Infelizmente, a Oferta Especial já acabou. O preço atual é o de tabela, que é R$ 2.199,00.
+> O desconto de 5% no PIX ainda continua valendo, então você pode aproveitar e comprar por R$ 2.089,05 se optar por essa forma de pagamento. [...]
 
 Full transcripts with the tool calls behind each answer are in [`examples/`](examples/).
 
@@ -41,10 +42,11 @@ emporio-chat --session ana      # persists the conversation; run again to resume
 Other commands:
 
 ```bash
-pytest                          # 29 deterministic tests, no API key needed
+python -m pytest                # 33 deterministic tests, no API key needed
 python scripts/data_audit.py    # data-quality findings in the provided dataset
 python scripts/run_examples.py  # regenerates the transcripts in examples/ (uses the API)
 python scripts/run_examples.py --model gpt-4.1-mini --out benchmarks/gpt-4.1-mini   # same scenarios, other model
+python scripts/run_examples.py --only 4   # re-run one scenario; summary.json keeps the others
 ```
 
 Model: `gpt-4o-mini` by default (see decision 2). Override with `EMPORIO_MODEL` in `.env` or `--model`.
@@ -112,9 +114,9 @@ Each transcript was then audited line by line against the CSVs and the manual (p
 |---|---|---|---|---|
 | `gpt-4.1-mini`, before fixes ([`benchmarks/gpt-4.1-mini`](benchmarks/gpt-4.1-mini)) | 0.00193 | 20 | 2 of 5 | 4: PIX price one cent low (tool rounding); 8 of 12 guitars shown as if they were all; order 8 never looked up, so the late delivery was missed; told a customer a return was within 7 days when the order dates contradict it |
 | `gpt-4o-mini`, before fixes ([`benchmarks/gpt-4o-mini`](benchmarks/gpt-4o-mini)) | 0.00095 | 20 | 3 of 5 | 3: the same two catalog errors; return registered without reading the policy or checking the dates. Plus markdown `**bold**`, which WhatsApp shows raw |
-| `gpt-4o-mini`, after fixes ([`examples/`](examples/)) | 0.00114 | 21 | 5 of 5 | 0 |
+| `gpt-4o-mini`, after fixes ([`examples/`](examples/)) | 0.00116 | 21 | 5 of 5 | 0 |
 
-Each error became a fix in the tool or the prompt, one commit each, with a test where the behaviour is deterministic: decimal rounding for prices, an explicit `lista_parcial` flag on truncated searches, days since the delivery estimate with an alert on returns, short order numbers in the lookup schema, one protocol per case, the weekly schedule in `status_da_loja`, and `**bold**` converted to WhatsApp bold in code. Each affected scenario was rerun after its fix (1 to 5 times; scenarios 3 and 4 on both models) before the next one.
+Each error became a fix in the tool or the prompt, one commit each, with a test where the behaviour is deterministic: decimal rounding for prices, an explicit `lista_parcial` flag on truncated searches, days since the delivery estimate with an alert on returns, short order numbers in the lookup schema, one protocol per case and a required contact before a ticket, the weekly schedule in `status_da_loja`, a note that the PIX discount survives an ended promotion (`gpt-4o-mini` said otherwise once while generating `examples/`), and `**bold**` converted to WhatsApp bold in code. Each affected scenario was rerun after its fix (1 to 5 times; scenarios 3 and 4 on both models) before the next one.
 
 **Conclusion:** `gpt-4o-mini` made fewer errors and cost half as much, so it is the default: US$ 0.00158 per correct conversation against US$ 0.00483 for `gpt-4.1-mini` before the fixes, and 5 of 5 correct after them. Its weak spot is nuanced instructions: in the return scenario it opens the ticket correctly but rarely tells the customer why the date needs checking, which `gpt-4.1-mini` does. If a wider evaluation showed that gap causing real errors, switching back is one environment variable.
 
@@ -172,12 +174,14 @@ Contradictions inside the policy manual, and the reading I assumed:
 | Not allowed | Enforced by |
 |---|---|
 | State a price, stock level or delivery estimate without checking | Only tools return them; the prompt forbids answering from memory |
-| Do arithmetic (PIX, installments, totals) | `simular_pagamento` computes, the model reads |
+| Do arithmetic (PIX, installments, totals) | `simular_pagamento` computes, the model reads; discounts are rounded half-up in `Decimal`, not float |
 | Stack the PIX discount on a promotional price | The tool returns the promo price as the PIX price |
 | Offer an expired promotion | Only `is_active = 1` promotions change prices; ended ones are labelled as ended |
 | Sell `coming_soon` or discontinued items | `sellable` flag; `simular_pagamento` refuses them |
 | Show an order without proof of identity | `consultar_pedido` requires a matching e-mail or phone |
-| Confirm or deny a return window on the customer's word | `consultar_pedido` computes the days since the delivery estimate and returns an alert; the team confirms the real receipt date |
+| Open a ticket nobody can answer, or the same ticket twice | `encaminhar_para_atendente` refuses without a contact and returns the existing protocol for a repeated case |
+| Send markdown that WhatsApp shows as symbols | `**bold**` is converted to WhatsApp `*bold*` in code, since the prompt rule alone did not hold |
+| Confirm or deny a return window on the customer's word | `consultar_pedido` computes the days since purchase and since the delivery estimate and returns an alert; the team confirms the real receipt date |
 | Read arbitrary data | There is no generic query tool |
 | Answer a policy question from memory | Rules come from `consultar_politica`, visible in the trace |
 
@@ -214,7 +218,7 @@ Generated by `scripts/run_examples.py` against the real model. Each file shows t
 - **Session storage** is a JSON file per conversation; production would use a database keyed by phone number, with retention rules under LGPD.
 - **Single provider at a time.** Switching provider means rewriting the loop in `agent.py` (done once already, Anthropic to OpenAI); a production version would add a fallback provider for outages.
 - **Delivery date.** The data has only the estimated delivery date, not the actual one, so return and exchange windows are always confirmed by the team when the dates disagree.
-- **Instruction following on `gpt-4o-mini`.** Hard rules are enforced in code where possible (prices, bold, duplicate tickets, hours). Softer ones, like explaining *why* a date needs checking, are followed less consistently than on `gpt-4.1-mini`.
+- **Instruction following on `gpt-4o-mini`.** Hard rules are enforced in code where possible (prices, bold, duplicate tickets, hours). Softer ones, like explaining *why* a date needs checking, are followed less consistently than on `gpt-4.1-mini`. Residual style slips in the final `examples/`: two emojis in one message (05) and asking for a preferred contact after the e-mail was given (03).
 - **Past order totals** are shown as recorded even where they disagree with the item prices; a real deployment would flag these to the team.
 - **Interface** is a CLI; next would be a WhatsApp webhook (the store's main channel) with out-of-hours auto-replies, as the manual describes.
 
@@ -232,4 +236,4 @@ How I used it:
 4. **Tests as the safety net.** Some first assumptions were wrong and the tests caught them. For example, a search for "violões nylon" returned a ukulele because its description mentions "violão", which led to treating category words as filters. And my expected installment count for one item was off, because the R$ 80 minimum allows 4x, not 3x.
 5. **Two independent builds, then a comparison.** I also had a second version built separately (policy manual pasted whole into the prompt, SQLite instead of DataFrames) and compared the two. I kept this one because policy lookups show up in the trace, which makes "did the agent check the rules?" verifiable, and because its tests and data audit caught more of the inconsistencies in the dataset. From the other version I took the "what the model is not allowed to do" table and the idea of measuring cost per conversation instead of estimating it.
 6. **Examples generated, not written.** The transcripts in `examples/` and `benchmarks/` come from running the agent against the real model, not from hand-written dialogue.
-7. **Audit before choosing.** The benchmark transcripts were checked against the data before any model decision, and every error became its own fix commit. One fix exposed the next problem: the first wording of the return alert stopped one model from saying "within the window" and made the other say "out of the window", which the rerun caught.
+7. **Audit before choosing.** The benchmark transcripts were checked against the data before any model decision, and every error became its own fix commit. One fix exposed the next problem: the first wording of the return alert stopped one model from saying "within the window" and made the other say "out of the window", which the rerun caught. A second run of the same audit was done in parallel and pushed to `main` first; the two were merged rather than one overwriting the other, keeping the fixes each had found (the required ticket contact and the 30-day defect rule came from that run).
