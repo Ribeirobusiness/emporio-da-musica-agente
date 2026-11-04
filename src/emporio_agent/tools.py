@@ -60,6 +60,13 @@ OPENING_HOURS = {  # weekday() -> (open, close); Sunday closed
     5: (time(9), time(13)),
 }
 
+def _span(day: int) -> str:
+    open_t, close_t = OPENING_HOURS[day]
+    return f"{open_t.strftime('%H:%M')} às {close_t.strftime('%H:%M')}"
+
+
+WEEKLY_HOURS_PT = {"segunda a sexta": _span(0), "sábado": _span(5), "domingo e feriados": "fechado"}
+
 WEEKDAYS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
 
 
@@ -359,6 +366,7 @@ class StoreTools:
         result = {
             "agora_em_campo_grande": now.strftime("%d/%m/%Y %H:%M") + f" ({WEEKDAYS_PT[now.weekday()]})",
             "aberta_agora": is_open,
+            "horario_semanal": WEEKLY_HOURS_PT,
         }
         if is_open:
             result["fecha_hoje_as"] = hours[1].strftime("%H:%M")
@@ -471,7 +479,8 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "name": "status_da_loja",
         "description": "Data e hora atuais em Campo Grande, se a loja está aberta agora e a próxima abertura. "
-                       "Use para 'vocês estão abertos?', 'atendem hoje?' e para saber se é fora do expediente.",
+                       "Use para 'vocês estão abertos?', 'atendem hoje?' e para saber se é fora do expediente. "
+                       "Também traz o horário de cada dia da semana (horario_semanal).",
         "input_schema": {"type": "object", "properties": {}},
     },
     {

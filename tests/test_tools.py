@@ -162,6 +162,14 @@ def test_store_open_on_weekday_morning(tools):
     assert tools.status_da_loja()["aberta_agora"] is True
 
 
+def test_store_status_includes_weekly_hours(tools):
+    # "Vocês abrem sábado?" may be routed here instead of the policy: the answer must still be in the result
+    hours = tools.status_da_loja()["horario_semanal"]
+    assert hours["sábado"] == "09:00 às 13:00"
+    assert hours["segunda a sexta"] == "09:00 às 18:00"
+    assert hours["domingo e feriados"] == "fechado"
+
+
 def test_store_closed_saturday_afternoon(tmp_path):
     t = make_tools(datetime(2026, 3, 28, 14, 0, tzinfo=STORE_TZ), tmp_path)
     status = t.status_da_loja()
