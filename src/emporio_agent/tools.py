@@ -174,10 +174,16 @@ class StoreTools:
         limite = max(1, min(int(limite), 20))
         result = {
             "total_encontrados": total_matches,
+            "total_disponiveis": int(df["sellable"].sum()),
             "produtos": [self._product_view(r) for r in df.head(limite).to_dict("records")],
         }
         if len(df) > limite:
-            result["observacao"] = f"Mostrando os {limite} mais baratos de {len(df)} resultados."
+            result["lista_parcial"] = True
+            result["observacao"] = (
+                f"Mostrando os {limite} mais baratos de {len(df)}. Há mais {len(df) - limite} opção(ões) "
+                "que não estão nesta lista: diga ao cliente que são algumas das opções e ofereça mostrar as demais "
+                "(chame de novo com limite maior)."
+            )
         if apenas_disponiveis and len(unavailable):
             result["indisponiveis_omitidos"] = [
                 {"nome": r["name"], "situacao": self._product_view(r)["disponibilidade"]}

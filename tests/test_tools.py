@@ -38,6 +38,17 @@ def test_violoes_ate_1000_only_sellable_and_within_budget(tools):
     assert "Shelby SN-7C 7 Cordas Nylon Natural" in omitted  # discontinued
 
 
+def test_partial_search_result_says_so(tools):
+    # 12 sellable guitars up to R$ 1000, 8 shown by default: the agent must be told the list is partial
+    result = tools.buscar_produtos(categoria="Violões", preco_max=1000)
+    assert result["total_disponiveis"] == 12
+    assert len(result["produtos"]) == 8
+    assert result["lista_parcial"] is True
+    assert "4" in result["observacao"]
+    full = tools.buscar_produtos(categoria="Violões", preco_max=1000, limite=20)
+    assert len(full["produtos"]) == 12 and "lista_parcial" not in full
+
+
 def test_plural_and_accents_in_free_text(tools):
     result = tools.buscar_produtos(termo="violões nylon", limite=20)
     assert result["total_encontrados"] > 0
