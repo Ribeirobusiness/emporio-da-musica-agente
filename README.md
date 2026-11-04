@@ -4,7 +4,17 @@ Prototype of a text-message customer service agent for **Empório da Música**, 
 
 The agent ("Duda") answers customers in Brazilian Portuguese, decides when to query store data (catalog, stock, promotions, orders) and when to read the policy manual (returns, warranty, shipping, payment, hours), computes prices and installments exactly, verifies identity before showing an order, and hands off to a human with a ticket number when it should.
 
-<!-- EXCERPT -->
+From [`examples/02_preco_promocao_expirada.md`](examples/02_preco_promocao_expirada.md) (real run, `gpt-4o-mini`):
+
+> **Cliente:** Quanto custa o Takamine GD20?
+>
+> `detalhes_produto({"produto": "Takamine GD20"})` → `"preco_tabela": "R$ 2.199,00"`, `"preco_no_pix": "R$ 2.089,05"`, `"promocoes_encerradas": ["Oferta Especial"]`
+>
+> **Duda:** O Takamine GD20 Dreadnought Natural está disponível por R$ 2.199,00. Se você optar pelo pagamento via PIX, o preço cai para R$ 2.089,05, com 5% de desconto. [...]
+>
+> **Cliente:** Mas eu vi que ele estava na Oferta Especial com desconto, ainda vale?
+>
+> **Duda:** A Oferta Especial já encerrou, então o preço atual é o normal de R$ 2.199,00.
 
 Full transcripts with the tool calls behind each answer are in [`examples/`](examples/).
 
@@ -33,13 +43,14 @@ emporio-chat --session ana      # persists the conversation; run again to resume
 Other commands:
 
 ```bash
-pytest                          # 23 deterministic tests, no API key needed
+python -m pytest                # 27 deterministic tests, no API key needed
 python scripts/data_audit.py    # data-quality findings in the provided dataset
 python scripts/run_examples.py  # regenerates the transcripts in examples/ (uses the API)
-python scripts/run_examples.py --model gpt-4o-mini --out benchmarks/gpt-4o-mini   # same scenarios, other model
+python scripts/run_examples.py --model gpt-4.1-mini --out benchmarks/gpt-4.1-mini   # same scenarios, other model
+python scripts/run_examples.py --only 4   # re-run one scenario; summary.json keeps the others
 ```
 
-Model: `gpt-4.1-mini` by default. Override with `EMPORIO_MODEL` in `.env` or `--model`.
+Model: `gpt-4o-mini` by default (see the benchmark below). Override with `EMPORIO_MODEL` in `.env` or `--model`.
 
 ---
 
@@ -98,7 +109,14 @@ The hard part of this workload is **routing** (which tool, with which arguments,
 
 I ran the same 5 scripted conversations (`scripts/run_examples.py`) on two candidates and compared tool routing and cost:
 
-<!-- BENCHMARK -->
+| Model | Cost per conversation (US$) | Model calls (5 conversations) | Errors found in the audit | Correct after fixes |
+|---|---|---|---|---|
+| `gpt-4.1-mini` | 0.00197 | 19 | 4: promised a return ("Pode sim!") before reading the policy or the order; opened a ticket with no contact, then a duplicate; accepted "recebi anteontem" against a delivery estimate of 22/12/2025; said a defect exchange "não cabe mais" without the warranty route | 5/5 |
+| `gpt-4o-mini` | 0.00097 | 19 | 5: confirmed the 7-day window against the same record; once refused flatly without offering the hand-off; paraphrased the installment rule wrongly once; called the delivery estimate a confirmed delivery and attributed to the customer something they never said; `**bold**` that WhatsApp shows as asterisks | 5/5 |
+
+Cost and call counts come from `benchmarks/*/summary.json` (latest run of each scenario). Every transcript was audited by hand against the CSVs and the manual: prices, stock, promotions, rules, order verification and scope. The audit also found one tool bug shared by both models: PIX prices were rounded with float `round()`, so R$ 599,90 with 5% off came out as R$ 569,90 instead of R$ 569,91 (4 of the 8 guitars listed). Each finding became a separate fix commit (tool, prompt or code), with a test where the behaviour is deterministic, and only the affected scenario was re-run.
+
+**Conclusion:** after the fixes both models answer all 5 conversations correctly with the same number of model calls, and `gpt-4o-mini` does it at half the cost (about US$ 0.97 per 1,000 conversations against US$ 1.97), so it is the default. It made slightly more errors before the fixes (it was also sampled more often, because it generated `examples/`), which is why everything that must be exact stays in Python rather than in the model. Five scenarios are a small sample: the choice should be re-checked on a larger evaluation set before production.
 
 The provider is isolated in `agent.py`. The project started on the Anthropic API and was moved to OpenAI for cost in a single commit where `agent.py` was the only module whose logic changed (the other files touched were dependencies, the CLI token printout, the loop tests and cost reporting in the example script). That is the practical proof that tools, data, policies and prompt are provider-agnostic. Repeated prefixes (system prompt plus tool schemas, about 3k tokens) are cached automatically by OpenAI, so most input tokens after the first call are billed at the cached rate.
 
@@ -154,7 +172,10 @@ Contradictions inside the policy manual, and the reading I assumed:
 | Not allowed | Enforced by |
 |---|---|
 | State a price, stock level or delivery estimate without checking | Only tools return them; the prompt forbids answering from memory |
-| Do arithmetic (PIX, installments, totals) | `simular_pagamento` computes, the model reads |
+| Do arithmetic (PIX, installments, totals) | `simular_pagamento` computes, the model reads; discounts are rounded half-up in `Decimal`, not float |
+| Work out return deadlines | `consultar_pedido` returns days since purchase and since the delivery estimate, plus an alert when the record contradicts the 7-day window |
+| Open a ticket nobody can answer | `encaminhar_para_atendente` refuses without a customer contact |
+| Send markdown that WhatsApp shows as symbols | `**bold**` is converted to WhatsApp `*bold*` in code, since the prompt rule alone did not hold |
 | Stack the PIX discount on a promotional price | The tool returns the promo price as the PIX price |
 | Offer an expired promotion | Only `is_active = 1` promotions change prices; ended ones are labelled as ended |
 | Sell `coming_soon` or discontinued items | `sellable` flag; `simular_pagamento` refuses them |
@@ -188,7 +209,7 @@ Generated by `scripts/run_examples.py` against the real model. Each file shows t
 
 ## Known limitations and what I would do with more time
 
-- **Evaluation.** The tools have unit tests, but the agent's answers are only checked through the example scenarios. Next step: a small evaluation set (around 50 questions with expected tool calls and facts) run on every change, using an LLM grader for tone and a deterministic checker for prices and policy facts.
+- **Evaluation.** The tools have unit tests, but the agent's answers are only checked through the example scenarios, audited by hand. Residual behaviour seen in the last runs: the model sometimes skips `consultar_politica` when the order tool's alert already states the rule, and in `examples/04` it asks again for a contact the customer had already given. Next step: a small evaluation set (around 50 questions with expected tool calls and facts) run on every change, using an LLM grader for tone and a deterministic checker for prices and policy facts.
 - **Holidays.** Only fixed-date national holidays are handled. Movable ones (Carnaval, Good Friday, Corpus Christi) and Campo Grande municipal holidays are not.
 - **Shipping cost.** The manual says outside the metro area it depends on ZIP code, weight and dimensions, which the data does not have. The agent explains the rule and the carriers but does not quote a value.
 - **Escalation** is written to a local JSONL file. In production it would open a ticket in the store's help desk or CRM and notify the team.
@@ -211,3 +232,4 @@ How I used it:
 4. **Tests as the safety net.** Some first assumptions were wrong and the tests caught them. For example, a search for "violões nylon" returned a ukulele because its description mentions "violão", which led to treating category words as filters. And my expected installment count for one item was off, because the R$ 80 minimum allows 4x, not 3x.
 5. **Two independent builds, then a comparison.** I also had a second version built separately (policy manual pasted whole into the prompt, SQLite instead of DataFrames) and compared the two. I kept this one because policy lookups show up in the trace, which makes "did the agent check the rules?" verifiable, and because its tests and data audit caught more of the inconsistencies in the dataset. From the other version I took the "what the model is not allowed to do" table and the idea of measuring cost per conversation instead of estimating it.
 6. **Examples generated, not written.** The transcripts in `examples/` and `benchmarks/` come from running the agent against the real model, not from hand-written dialogue.
+7. **Audit, then fix at the root.** After the benchmark I audited every transcript against the data. Each error became its own commit, in the tool when the fix could be deterministic (return deadlines, rounding, required contact, WhatsApp formatting) and in the prompt otherwise, followed by a re-run of only the affected scenario. The commit history shows each finding and its fix.
