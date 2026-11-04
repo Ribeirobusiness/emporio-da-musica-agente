@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Empório da Música customer service agent")
     parser.add_argument("--session", help="persist the conversation under this name (sessions/<name>.json)")
-    parser.add_argument("--model", help="OpenAI model id (default: EMPORIO_MODEL or gpt-4.1-mini)")
+    parser.add_argument("--model", help="OpenAI model id (default: EMPORIO_MODEL or gpt-4o-mini)")
     parser.add_argument("--debug", action="store_true", help="print tool calls and token usage")
     args = parser.parse_args(argv)
 
